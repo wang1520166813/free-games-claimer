@@ -10,6 +10,7 @@ on:
 jobs:
   claim:
     runs-on: ubuntu-latest
+    timeout-minutes: 30 # 整体超时30分钟，防止无限等待
     
     steps:
       - name: Checkout
@@ -32,4 +33,16 @@ jobs:
           EG_PASSWORD: ${{ secrets.EG_PASSWORD }}
           EG_OTPKEY: ${{ secrets.EG_OTPKEY }}
           NOTIFY: ${{ secrets.NOTIFY }}
+          # 增加日志和重试相关配置
+          TIME: '1'
+          LOGIN_TIMEOUT: '120'
+          TIMEOUT: '90'
         run: node epic-games.js
+
+      - name: Upload debug screenshots (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: epic-games-debug-${{ github.run_id }}
+          path: data/screenshots/epic-games/debug/
+          retention-days: 7
