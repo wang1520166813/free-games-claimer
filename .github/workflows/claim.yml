@@ -1,4 +1,4 @@
-name: Auto Claim Free Games
+name: Auto Claim Epic Games
 
 on:
   schedule:
@@ -35,30 +35,3 @@ jobs:
           EG_OTPKEY: ${{ secrets.EG_OTPKEY }}
           NOTIFY: ${{ secrets.NOTIFY }}
         run: node epic-games.js
-        continue-on-error: true
-
-      - name: Claim Prime Gaming
-        env:
-          PG_EMAIL: ${{ secrets.PG_EMAIL }}
-          PG_PASSWORD: ${{ secrets.PG_PASSWORD }}
-          PG_OTPKEY: ${{ secrets.PG_OTPKEY }}
-          NOTIFY: ${{ secrets.NOTIFY }}
-        run: node prime-gaming.js
-        continue-on-error: true
-
-      - name: Claim GOG
-        env:
-          GOG_EMAIL: ${{ secrets.GOG_EMAIL }}
-          GOG_PASSWORD: ${{ secrets.GOG_PASSWORD }}
-          NOTIFY: ${{ secrets.NOTIFY }}
-        run: node gog.js
-        continue-on-error: true
-
-      - name: Claim Unreal Engine Assets
-        env:
-          EG_EMAIL: ${{ secrets.EG_EMAIL }}
-          EG_PASSWORD: ${{ secrets.EG_PASSWORD }}
-          EG_OTPKEY: ${{ secrets.EG_OTPKEY }}
-          NOTIFY: ${{ secrets.NOTIFY }}
-        run: node unrealengine.js
-        continue-on-error: true
