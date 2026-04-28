@@ -36,7 +36,7 @@ const context = await firefox.launchPersistentContext(cfg.dir.browser, {
  recordHar: cfg.record ? { path: `data/record/eg-${filenamify(datetime())}.har` } : undefined,
  handleSIGINT: false,
  args: [
-  '-kiosk', // Kiosk mode can help with some fingerprinting
+ '-kiosk', // Kiosk mode can help with some fingerprinting
  ],
 });
 
@@ -209,7 +209,7 @@ try {
  // Detect free games
  console.log('Checking for free games...');
  const game_loc = page.locator('a:has(span:text-is("Free Now"))');
- await game_loc.last().waitFor().catch(_ => {
+ await game_loc.last().waitFor().catch(async _ => {
   console.error('No free games currently available or timeout waiting for games.');
   console.error('This could be due to: 1) No free games this week, 2) Region restrictions, 3) Page loading issues');
   await saveScreenshot(page, 'no_free_games');
