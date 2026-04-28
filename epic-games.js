@@ -85,7 +85,13 @@ async function saveScreenshot(page, prefix = 'debug') {
 
 // Helper function to parse and inject cookies from EPIC_COOKIE environment variable
 async function tryCookieLogin() {
- if (!process.env.EPIC_COOKIE) {
+ const cookieValue = process.env.EPIC_COOKIE;
+ 
+ // DEBUG: Print the length of the cookie value to confirm it exists
+ console.log(`🔍 DEBUG: EPIC_COOKIE length = ${cookieValue ? cookieValue.length : 0}`);
+ 
+ if (!cookieValue || cookieValue.trim() === '') {
+  console.warn('⚠️ EPIC_COOKIE is empty or not set. Skipping cookie login.');
   return false;
  }
 
@@ -93,7 +99,7 @@ async function tryCookieLogin() {
 
  try {
   // Parse the cookie string into Playwright cookie format
-  const cookieString = process.env.EPIC_COOKIE.trim();
+  const cookieString = cookieValue.trim();
   const cookies = cookieString.split('; ').map(cookieStr => {
    const [name, value] = cookieStr.split('=');
    return {
@@ -148,6 +154,10 @@ try {
 
  // Check if already logged in
  let isLoggedIn = await page.locator('egs-navigation').getAttribute('isloggedin');
+ 
+ // DEBUG: Print initial login status
+ console.log(`🔍 DEBUG: Initial isLoggedIn status = ${isLoggedIn}`);
+ console.log(`🔍 DEBUG: process.env.EPIC_COOKIE exists = ${!!process.env.EPIC_COOKIE}`);
  
  // Try cookie login first if EPIC_COOKIE is set
  if (!isLoggedIn && process.env.EPIC_COOKIE) {
