@@ -83,6 +83,57 @@ async function saveScreenshot(page, prefix = 'debug') {
  }
 }
 
+// Helper function to parse and inject cookies from EPIC_COOKIE environment variable
+async function tryCookieLogin() {
+ if (!process.env.EPIC_COOKIE) {
+  return false;
+ }
+
+ console.log('🔑 Detected EPIC_COOKIE, attempting cookie-based login...');
+
+ try {
+  // Parse the cookie string into Playwright cookie format
+  const cookieString = process.env.EPIC_COOKIE.trim();
+  const cookies = cookieString.split('; ').map(cookieStr => {
+   const [name, value] = cookieStr.split('=');
+   return {
+    name: name,
+    value: value,
+    domain: '.epicgames.com',
+    url: 'https://www.epicgames.com'
+   };
+  });
+
+  // Inject cookies
+  await context.addCookies(cookies);
+  console.log(`✅ Injected ${cookies.length} cookies`);
+
+  // Navigate to store to verify login
+  await page.goto(URL_CLAIM, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+  // Wait a bit for page to fully load
+  await page.waitForTimeout(3000);
+
+  // Check if logged in by looking for user avatar or isloggedin attribute
+  const isLoggedIn = await page.locator('egs-navigation').getAttribute('isloggedin');
+  
+  if (isLoggedIn === 'true') {
+   user = await page.locator('egs-navigation').getAttribute('displayname');
+   console.log(`✅ Cookie login successful! Signed in as: ${user}`);
+   await saveScreenshot(page, 'logged_in_via_cookie');
+   return true;
+  } else {
+   console.warn('⚠️ Cookie login failed: Page shows not logged in. Cookies may be expired or invalid.');
+   await saveScreenshot(page, 'cookie_login_failed');
+   return false;
+  }
+ } catch (e) {
+  console.warn('⚠️ Cookie login error:', e.message);
+  await saveScreenshot(page, 'cookie_login_error');
+  return false;
+ }
+}
+
 try {
  await context.addCookies([
   { name: 'OptanonAlertBoxClosed', value: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), domain: '.epicgames.com', path: '/' },
@@ -96,8 +147,16 @@ try {
  if (cfg.time) console.time('login');
 
  // Check if already logged in
- const isLoggedIn = await page.locator('egs-navigation').getAttribute('isloggedin');
+ let isLoggedIn = await page.locator('egs-navigation').getAttribute('isloggedin');
  
+ // Try cookie login first if EPIC_COOKIE is set
+ if (!isLoggedIn && process.env.EPIC_COOKIE) {
+  const cookieLoginSuccess = await tryCookieLogin();
+  if (cookieLoginSuccess) {
+   isLoggedIn = 'true';
+  }
+ }
+
  if (isLoggedIn != 'true') {
   console.error('Not signed in anymore. Starting login process...');
   await saveScreenshot(page, 'before_login');
@@ -198,7 +257,9 @@ try {
   if (!cfg.debug) context.setDefaultTimeout(cfg.timeout);
  }
 
- user = await page.locator('egs-navigation').getAttribute('displayname');
+ if (!user) {
+  user = await page.locator('egs-navigation').getAttribute('displayname');
+ }
  console.log(`Signed in as ${user}`);
  await saveScreenshot(page, 'logged_in_success');
  
