@@ -1,48 +1,49 @@
 name: Auto Claim Epic Games
 
 on:
-  schedule:
-    # 每天 UTC 0:00 运行（北京时间早上8点）
-    # Epic 每周四更新，但每天运行一次可防止遗漏
-    - cron: '0 0 * * *'
-  workflow_dispatch: # 手动触发
+ schedule:
+ # 每天 UTC 0:00 运行（北京时间早上 8 点）
+ # Epic 每周四更新，但每天运行一次可防止遗漏
+ - cron: '0 0 * * *'
+ workflow_dispatch: # 手动触发
 
 jobs:
-  claim:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30 # 整体超时30分钟，防止无限等待
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+ claim:
+ runs-on: ubuntu-latest
+ timeout-minutes: 30 # 整体超时 30 分钟，防止无限等待
+  
+ steps:
+ - name: Checkout
+ uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+ - name: Setup Node.js
+ uses: actions/setup-node@v4
+ with:
+ node-version: '20'
 
-      - name: Install dependencies
-        run: npm install
+ - name: Install dependencies
+ run: npm install
 
-      - name: Install Playwright Firefox
-        run: npx playwright install firefox --with-deps
+ - name: Install Playwright Firefox
+ run: npx playwright install firefox --with-deps
 
-      - name: Claim Epic Games
-        env:
-          EG_EMAIL: ${{ secrets.EG_EMAIL }}
-          EG_PASSWORD: ${{ secrets.EG_PASSWORD }}
-          EG_OTPKEY: ${{ secrets.EG_OTPKEY }}
-          NOTIFY: ${{ secrets.NOTIFY }}
-          # 增加日志和重试相关配置
-          TIME: '1'
-          LOGIN_TIMEOUT: '120'
-          TIMEOUT: '90'
-        run: node epic-games.js
+ - name: Claim Epic Games
+ env:
+ EG_EMAIL: ${{ secrets.EG_EMAIL }}
+ EG_PASSWORD: ${{ secrets.EG_PASSWORD }}
+ EG_OTPKEY: ${{ secrets.EG_OTPKEY }}
+ EPIC_COOKIE: ${{ secrets.EPIC_COOKIE }} # 新增：传递 Cookie Secret 到环境变量
+ NOTIFY: ${{ secrets.NOTIFY }}
+ # 增加日志和重试相关配置
+ TIME: '1'
+ LOGIN_TIMEOUT: '120'
+ TIMEOUT: '90'
+ run: node epic-games.js
 
-      - name: Upload debug screenshots (if any)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: epic-games-debug-${{ github.run_id }}
-          path: data/screenshots/epic-games/debug/
-          retention-days: 7
+ - name: Upload debug screenshots (if any)
+ if: always()
+ uses: actions/upload-artifact@v4
+ with:
+ name: epic-games-debug-${{ github.run_id }}
+ path: data/screenshots/epic-games/debug/
+ retention-days: 7
