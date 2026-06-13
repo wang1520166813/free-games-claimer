@@ -21,6 +21,25 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Validate secrets
+        id: validate
+        run: |
+          echo "Validating required secrets..."
+          missing=()
+          [[ -z "${EG_EMAIL}" ]] && missing+=("EG_EMAIL")
+          [[ -z "${EG_PASSWORD}" ]] && missing+=("EG_PASSWORD")
+          [[ -z "${EPIC_COOKIE}" ]] && missing+=("EPIC_COOKIE")
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "Error: Missing required secrets: ${missing[*]}"
+            echo "Please set them in Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+          echo "All required secrets are present."
+        env:
+          EG_EMAIL: ${{ secrets.EG_EMAIL }}
+          EG_PASSWORD: ${{ secrets.EG_PASSWORD }}
+          EPIC_COOKIE: ${{ secrets.EPIC_COOKIE }}
+
       - name: Install dependencies
         run: npm install
 
