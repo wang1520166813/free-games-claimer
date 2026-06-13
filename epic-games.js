@@ -20,7 +20,7 @@ if (cfg.time) console.time('startup');
 const browserPrefs = path.join(cfg.dir.browser, 'prefs.js');
 if (existsSync(browserPrefs)) {
  console.log('Adding webgl.disabled to', browserPrefs);
- appendFileSync(browserPrefs, 'user_pref("webgl.disabled", true);'); // apparently Firefox removes duplicates (and sorts), so no problem appending every time
+ appendFileSync(browserPrefs, 'user_pref(\"webgl.disabled\", true);'); // apparently Firefox removes duplicates (and sorts), so no problem appending every time
 } else {
  console.log(browserPrefs, 'does not exist yet, will patch it on next run. Restart the script if you get a captcha.');
 }
@@ -36,7 +36,7 @@ const context = await firefox.launchPersistentContext(cfg.dir.browser, {
  recordHar: cfg.record ? { path: `data/record/eg-${filenamify(datetime())}.har` } : undefined,
  handleSIGINT: false,
  args: [
- '-kiosk', // Kiosk mode can help with some fingerprinting
+  '-kiosk', // Kiosk mode can help with some fingerprinting
  ],
 });
 
@@ -51,12 +51,7 @@ await page.setViewportSize({ width: cfg.width, height: cfg.height });
 
 // Enhanced debug info
 if (cfg.debug) {
- const debugInfo = await page.evaluate(() => [
-  window.screen.width, window.screen.height,
-  navigator.userAgent,
-  navigator.platform,
-  navigator.vendor
- ]);
+ const debugInfo = await page.evaluate(() => [window.screen.width, window.screen.height, navigator.userAgent, navigator.platform, navigator.vendor]);
  console.debug('Browser debug info:', debugInfo);
 }
 
@@ -100,15 +95,32 @@ async function tryCookieLogin() {
  try {
   // Parse the cookie string into Playwright cookie format
   const cookieString = cookieValue.trim();
-  const cookies = cookieString.split('; ').map(cookieStr => {
-   const [name, value] = cookieStr.split('=');
-   return {
+  // Split by ';' and filter out empty parts, trim each part
+  const cookieParts = cookieString.split(';').map(part => part.trim()).filter(part => part.length > 0);
+  const cookies = [];
+  for (const part of cookieParts) {
+   // Each part should be name=value
+   const eqIndex = part.indexOf('=');
+   if (eqIndex === -1) {
+    console.warn(`⚠️ Skipping malformed cookie part: ${part}`);
+    continue;
+   }
+   const name = part.substring(0, eqIndex).trim();
+   const value = part.substring(eqIndex + 1).trim();
+   // Some cookies may have surrounding quotes; remove them
+   const cleanValue = value.replace(/^["']|["']$/g, '');
+   cookies.push({
     name: name,
-    value: value,
+    value: cleanValue,
     domain: '.epicgames.com',
     url: 'https://www.epicgames.com'
-   };
-  });
+   });
+  }
+
+  if (cookies.length === 0) {
+   console.warn('⚠️ No valid cookies parsed from EPIC_COOKIE.');
+   return false;
+  }
 
   // Inject cookies
   await context.addCookies(cookies);
@@ -154,11 +166,11 @@ try {
 
  // Check if already logged in
  let isLoggedIn = await page.locator('egs-navigation').getAttribute('isloggedin');
- 
+
  // DEBUG: Print initial login status
  console.log(`🔍 DEBUG: Initial isLoggedIn status = ${isLoggedIn}`);
  console.log(`🔍 DEBUG: process.env.EPIC_COOKIE exists = ${!!process.env.EPIC_COOKIE}`);
- 
+
  // Try cookie login first if EPIC_COOKIE is set
  if (!isLoggedIn && process.env.EPIC_COOKIE) {
   const cookieLoginSuccess = await tryCookieLogin();
@@ -170,13 +182,13 @@ try {
  if (isLoggedIn != 'true') {
   console.error('Not signed in anymore. Starting login process...');
   await saveScreenshot(page, 'before_login');
-  
+
   if (cfg.novnc_port) console.info(`Open http://localhost:${cfg.novnc_port} to login inside the docker container.`);
   if (!cfg.debug) context.setDefaultTimeout(cfg.login_timeout);
   console.info(`Login timeout is ${cfg.login_timeout / 1000} seconds!`);
-  
+
   await page.goto(URL_LOGIN, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  
+
   // Save screenshot of login page
   await saveScreenshot(page, 'login_page');
 
@@ -195,7 +207,7 @@ try {
   };
 
   const email = cfg.eg_email || await prompt({ message: 'Enter email' });
-  
+
   if (!email) {
    await notifyBrowserLogin();
   } else {
@@ -207,22 +219,22 @@ try {
    }).catch(_ => { });
 
    // Monitor for incorrect captcha response
-   page.waitForSelector('p:has-text("Incorrect response.")').then(async () => {
+   page.waitForSelector('p:has-text(\"Incorrect response.\")').then(async () => {
     console.error('Incorrect response for captcha!');
     await saveScreenshot(page, 'captcha_error');
    }).catch(_ => { });
 
    await page.fill('#email', email);
-   
+
    const password = email && (cfg.eg_password || await prompt({ type: 'password', message: 'Enter password' }));
-   
+
    if (!password) {
     await notifyBrowserLogin();
    } else {
     console.log('Submitting login credentials...');
     await page.fill('#password', password);
-    await page.click('button[type="submit"]');
-    
+    await page.click('button[type=\"submit\"]');
+
     // Monitor for login errors
     const error = page.locator('#form-error-message');
     error.waitFor().then(async () => {
@@ -232,13 +244,13 @@ try {
      console.log('Please login in the browser!');
     }).catch(_ => { });
    }
-
+   
    // Handle MFA
    page.waitForURL('**/id/login/mfa**').then(async () => {
     console.log('MFA detected. Enter the security code to continue...');
     const otp = cfg.eg_otpkey && authenticator.generate(cfg.eg_otpkey) || await prompt({ type: 'text', message: 'Enter two-factor sign in code', validate: n => n.toString().length == 6 || 'The code must be 6 digits!' });
-    await page.locator('input[name="code-input-0"]').pressSequentially(otp.toString());
-    await page.click('button[type="submit"]');
+    await page.locator('input[name=\"code-input-0\"]').pressSequentially(otp.toString());
+    await page.click('button[type=\"submit\"]');
    }).catch(_ => { });
   }
 
@@ -246,7 +258,7 @@ try {
   console.log('Waiting for successful login...');
   let loginAttempts = 0;
   const maxLoginAttempts = 3;
-  
+
   while (loginAttempts < maxLoginAttempts) {
    try {
     await page.waitForURL(URL_CLAIM, { timeout: 180000 }); // 3 minutes timeout
@@ -255,7 +267,7 @@ try {
     loginAttempts++;
     console.error(`Login attempt ${loginAttempts} failed. Retrying...`);
     await saveScreenshot(page, `login_timeout_attempt_${loginAttempts}`);
-    
+
     if (loginAttempts >= maxLoginAttempts) {
      console.error('Max login attempts reached. Please check credentials.');
      await saveScreenshot(page, 'login_final_failure');
@@ -263,7 +275,7 @@ try {
     }
    }
   }
-  
+
   if (!cfg.debug) context.setDefaultTimeout(cfg.timeout);
  }
 
@@ -272,14 +284,14 @@ try {
  }
  console.log(`Signed in as ${user}`);
  await saveScreenshot(page, 'logged_in_success');
- 
+
  db.data[user] ||= {};
  if (cfg.time) console.timeEnd('login');
  if (cfg.time) console.time('claim all games');
 
  // Detect free games
  console.log('Checking for free games...');
- const game_loc = page.locator('a:has(span:text-is("Free Now"))');
+ const game_loc = page.locator('a:has(span:text-is(\"Free Now\"))');
  await game_loc.last().waitFor().catch(async _ => {
   console.error('No free games currently available or timeout waiting for games.');
   console.error('This could be due to: 1) No free games this week, 2) Region restrictions, 3) Page loading issues');
@@ -293,48 +305,48 @@ try {
  for (const url of urls) {
   if (cfg.time) console.time('claim game');
   console.log(`Processing game: ${url}`);
-  
+
   await page.goto(url);
-  const purchaseBtn = page.locator('button[data-testid="purchase-cta-button"] >> :has-text("e"), :has-text("i")').first();
+  const purchaseBtn = page.locator('button[data-testid=\"purchase-cta-button\"] >> :has-text(\"e\"), :has-text(\"i\")').first();
   await purchaseBtn.waitFor();
   const btnText = (await purchaseBtn.innerText()).toLowerCase();
 
   // Age verification
-  if (await page.locator('button:has-text("Continue")').count() > 0) {
+  if (await page.locator('button:has-text(\"Continue\")').count() > 0) {
    console.log('Mature content age verification required');
-   if (await page.locator('[data-testid="AgeSelect"]').count()) {
+   if (await page.locator('[data-testid=\"AgeSelect\"]').count()) {
     console.error('Age gate detected - this should not happen with proper cookies');
     await saveScreenshot(page, 'age_gate');
     await page.locator('#month_toggle').click();
-    await page.locator('#month_menu li:has-text("01")').click();
+    await page.locator('#month_menu li:has-text(\"01\")').click();
     await page.locator('#day_toggle').click();
-    await page.locator('#day_menu li:has-text("01")').click();
+    await page.locator('#day_menu li:has-text(\"01\")').click();
     await page.locator('#year_toggle').click();
-    await page.locator('#year_menu li:has-text("1987")').click();
+    await page.locator('#year_menu li:has-text(\"1987\")').click();
    }
-   await page.click('button:has-text("Continue")', { delay: 111 });
+   await page.click('button:has-text(\"Continue\")', { delay: 111 });
    await page.waitForTimeout(2000);
   }
 
   let title;
   let bundle_includes;
-  if (await page.locator('span:text-is("About Bundle")').count()) {
-   title = (await page.locator('span:has-text("Buy"):left-of([data-testid="purchase-cta-button"])').first().innerText()).replace('Buy ', '');
+  if (await page.locator('span:text-is(\"About Bundle\")').count()) {
+   title = (await page.locator('span:has-text(\"Buy\"):left-of([data-testid=\"purchase-cta-button\"])').first().innerText()).replace('Buy ', '');
    try {
     bundle_includes = await Promise.all((await page.locator('.product-card-top-row h5').all()).map(b => b.innerText()));
    } catch (e) {
-    console.error('Failed to get "Bundle Includes":', e);
+    console.error('Failed to get \"Bundle Includes\":', e);
    }
   } else {
    title = await page.locator('h1').first().innerText();
   }
-  
+
   const game_id = page.url().split('/').pop();
   const existedInDb = db.data[user][game_id];
   db.data[user][game_id] ||= { title, time: datetime(), url: page.url() };
   console.log('Current free game:', chalk.blue(title));
   if (bundle_includes) console.log('This bundle includes:', bundle_includes);
-  
+
   const notify_game = { title, url, status: 'failed' };
   notify_games.push(notify_game);
 
@@ -348,7 +360,7 @@ try {
    console.log('Requires base game!');
    notify_game.status = 'requires base game';
    db.data[user][game_id].status ||= 'failed:requires-base-game';
-   const baseUrl = 'https://store.epicgames.com' + await page.locator('a:has-text("Overview")').getAttribute('href');
+   const baseUrl = 'https://store.epicgames.com' + await page.locator('a:has-text(\"Overview\")').getAttribute('href');
    console.log('Base game:', baseUrl);
    urls.push(baseUrl);
    urls.push(url);
@@ -356,19 +368,19 @@ try {
    console.log('Claiming game...');
    await purchaseBtn.click({ delay: 11 });
 
-   page.click('button:has-text("Continue")').catch(_ => { });
-   page.click('button:has-text("Yes, buy now")').catch(_ => { });
+   page.click('button:has-text(\"Continue\")').catch(_ => { });
+   page.click('button:has-text(\"Yes, buy now\")').catch(_ => { });
 
-   page.locator(':has-text("end user license agreement")').waitFor().then(async () => {
+   page.locator(':has-text(\"end user license agreement\")').waitFor().then(async () => {
     console.log('Accepting End User License Agreement...');
     await page.locator('input#agree').check();
-    await page.locator('button:has-text("Accept")').click();
+    await page.locator('button:has-text(\"Accept\")').click();
    }).catch(_ => { });
 
    await page.waitForSelector('#webPurchaseContainer iframe');
    const iframe = page.frameLocator('#webPurchaseContainer iframe');
-   
-   if (await iframe.locator(':has-text("unavailable in your region")').count() > 0) {
+
+   if (await iframe.locator(':has-text(\"unavailable in your region\")').count() > 0) {
     console.error('Product unavailable in your region!');
     db.data[user][game_id].status = notify_game.status = 'unavailable-in-region';
     if (cfg.time) console.timeEnd('claim game');
@@ -381,7 +393,7 @@ try {
      notify('epic-games: EG_PARENTALPIN not set. Need to enter Parental Control PIN manually.');
     }
     await iframe.locator('input.payment-pin-code__input').first().pressSequentially(cfg.eg_parentalpin);
-    await iframe.locator('button:has-text("Continue")').click({ delay: 11 });
+    await iframe.locator('button:has-text(\"Continue\")').click({ delay: 11 });
    }).catch(_ => { });
 
    if (cfg.debug) await page.pause();
@@ -392,9 +404,9 @@ try {
     continue;
    }
 
-   await iframe.locator('button:has-text("Place Order"):not(:has(.payment-loading--loading))').click({ delay: 11 });
+   await iframe.locator('button:has-text(\"Place Order\"):not(:has(.payment-loading--loading))').click({ delay: 11 });
 
-   const btnAgree = iframe.locator('button:has-text("I Accept")');
+   const btnAgree = iframe.locator('button:has-text(\"I Accept\")');
    btnAgree.waitFor().then(() => btnAgree.click()).catch(_ => { });
 
    try {
@@ -404,12 +416,12 @@ try {
      await saveScreenshot(page, 'captcha_challenge');
      await notify(`epic-games: captcha challenge for ${title}. Game link: ${url}`);
     }).catch(_ => { });
-    
-    iframe.locator('.payment__errors:has-text("Failed to challenge captcha, please try again later.")').waitFor().then(async () => {
+
+    iframe.locator('.payment__errors:has-text(\"Failed to challenge captcha, please try again later.\")').waitFor().then(async () => {
      console.error('Failed to challenge captcha!');
      await notify('epic-games: failed to challenge captcha. Please check.');
     }).catch(_ => { });
-    
+
     await page.locator('text=Thanks for your order!').waitFor({ state: 'attached' });
     db.data[user][game_id].status = 'claimed';
     db.data[user][game_id].time = datetime();
@@ -421,23 +433,23 @@ try {
     await page.screenshot({ path: p, fullPage: true });
     db.data[user][game_id].status = 'failed';
    }
-   
+
    notify_game.status = db.data[user][game_id].status;
 
    const p = screenshot(`${game_id}.png`);
    if (!existsSync(p)) await page.screenshot({ path: p, fullPage: false });
   }
-  
+
   if (cfg.time) console.timeEnd('claim game');
  }
- 
+
  if (cfg.time) console.timeEnd('claim all games');
 } catch (error) {
  process.exitCode ||= 1;
  console.error('--- Exception:');
  console.error(error);
  await saveScreenshot(page, 'final_error');
- if (error.message && process.exitCode != 130) notify(`epic-games failed: ${error.message.split('\n')[0]}`);
+ if (error.message && process.exitCode != 130) notify(`epic-games failed: ${error.message.split('\\n')[0]}`);
 } finally {
  await db.write();
  if (notify_games.filter(g => g.status == 'claimed' || g.status == 'failed').length) {
