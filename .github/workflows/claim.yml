@@ -28,7 +28,6 @@ jobs:
           missing=()
           [[ -z "${EG_EMAIL}" ]] && missing+=("EG_EMAIL")
           [[ -z "${EG_PASSWORD}" ]] && missing+=("EG_PASSWORD")
-          [[ -z "${EPIC_COOKIE}" ]] && missing+=("EPIC_COOKIE")
           if [ ${#missing[@]} -ne 0 ]; then
             echo "Error: Missing required secrets: ${missing[*]}"
             echo "Please set them in Settings > Secrets and variables > Actions"
@@ -38,7 +37,6 @@ jobs:
         env:
           EG_EMAIL: ${{ secrets.EG_EMAIL }}
           EG_PASSWORD: ${{ secrets.EG_PASSWORD }}
-          EPIC_COOKIE: ${{ secrets.EPIC_COOKIE }}
 
       - name: Install dependencies
         run: npm install
@@ -51,7 +49,7 @@ jobs:
           EG_EMAIL: ${{ secrets.EG_EMAIL }}
           EG_PASSWORD: ${{ secrets.EG_PASSWORD }}
           EG_OTPKEY: ${{ secrets.EG_OTPKEY }}
-          EPIC_COOKIE: ${{ secrets.EPIC_COOKIE }} # 新增：传递 Cookie Secret 到环境变量
+          EPIC_COOKIE: ${{ secrets.EPIC_COOKIE }} # 新增：传递 Cookie Secret 到环境变量（可选）
           NOTIFY: ${{ secrets.NOTIFY }}
           # 增加日志和重试相关配置
           TIME: '1'
