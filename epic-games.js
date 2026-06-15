@@ -20,7 +20,7 @@ if (cfg.time) console.time('startup');
 const browserPrefs = path.join(cfg.dir.browser, 'prefs.js');
 if (existsSync(browserPrefs)) {
  console.log('Adding webgl.disabled to', browserPrefs);
- appendFileSync(browserPrefs, 'user_pref(\"webgl.disabled\", true);'); // apparently Firefox removes duplicates (and sorts), so no problem appending every time
+ appendFileSync(browserPrefs, 'user_pref(\\\"webgl.disabled\\\", true);'); // apparently Firefox removes duplicates (and sorts), so no problem appending every time
 } else {
  console.log(browserPrefs, 'does not exist yet, will patch it on next run. Restart the script if you get a captcha.');
 }
@@ -108,7 +108,7 @@ async function tryCookieLogin() {
    const name = part.substring(0, eqIndex).trim();
    const value = part.substring(eqIndex + 1).trim();
    // Some cookies may have surrounding quotes; remove them
-   const cleanValue = value.replace(/^["']|["']$/g, '');
+   const cleanValue = value.replace(/^[\"']|[\"']$/g, '');
    cookies.push({
     name: name,
     value: cleanValue,
@@ -152,6 +152,57 @@ async function tryCookieLogin() {
  }
 }
 
+// Helper function to attempt login using EG_EMAIL and EG_PASSWORD environment variables
+async function tryPasswordLogin() {
+ const email = process.env.EG_EMAIL || process.env.EMAIL;
+ const password = process.env.EG_PASSWORD || process.env.PASSWORD;
+ 
+ if (!email || !password) {
+  console.warn('⚠️ EG_EMAIL or EG_PASSWORD not set. Skipping password login.');
+  return false;
+ }
+
+ console.log('🔑 Detected EG_EMAIL/EG_PASSWORD, attempting password-based login...');
+
+ try {
+  // Navigate to login page
+  await page.goto(URL_LOGIN, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  
+  // Fill email
+  await page.fill('#email', email);
+  
+  // Fill password
+  await page.fill('#password', password);
+  
+  // Click submit
+  await page.click('button[type="submit"]');
+  
+  // Wait for navigation to claim page or detect error
+  await page.waitForURL(URL_CLAIM, { timeout: 120000 }).catch(() => {
+   throw new Error('Login did not redirect to claim page within timeout');
+  });
+  
+  // Verify login status
+  await page.waitForTimeout(3000);
+  const isLoggedIn = await page.locator('egs-navigation').getAttribute('isloggedin');
+  
+  if (isLoggedIn === 'true') {
+   user = await page.locator('egs-navigation').getAttribute('displayname');
+   console.log(`✅ Password login successful! Signed in as: ${user}`);
+   await saveScreenshot(page, 'logged_in_via_password');
+   return true;
+  } else {
+   console.warn('⚠️ Password login failed: Page shows not logged in after submission.');
+   await saveScreenshot(page, 'password_login_failed');
+   return false;
+  }
+ } catch (e) {
+  console.warn('⚠️ Password login error:', e.message);
+  await saveScreenshot(page, 'password_login_error');
+  return false;
+ }
+}
+
 try {
  await context.addCookies([
   { name: 'OptanonAlertBoxClosed', value: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), domain: '.epicgames.com', path: '/' },
@@ -170,8 +221,17 @@ try {
  // DEBUG: Print initial login status
  console.log(`🔍 DEBUG: Initial isLoggedIn status = ${isLoggedIn}`);
  console.log(`🔍 DEBUG: process.env.EPIC_COOKIE exists = ${!!process.env.EPIC_COOKIE}`);
+ console.log(`🔍 DEBUG: process.env.EG_EMAIL exists = ${!!process.env.EG_EMAIL}`);
 
- // Try cookie login first if EPIC_COOKIE is set
+ // Try email/password login first if credentials are set
+ if (!isLoggedIn && process.env.EG_EMAIL && process.env.EG_PASSWORD) {
+  const passwordLoginSuccess = await tryPasswordLogin();
+  if (passwordLoginSuccess) {
+   isLoggedIn = 'true';
+  }
+ }
+
+ // Fallback to cookie login if EPIC_COOKIE is set and still not logged in
  if (!isLoggedIn && process.env.EPIC_COOKIE) {
   const cookieLoginSuccess = await tryCookieLogin();
   if (cookieLoginSuccess) {
@@ -233,7 +293,7 @@ try {
    } else {
     console.log('Submitting login credentials...');
     await page.fill('#password', password);
-    await page.click('button[type=\"submit\"]');
+    await page.click('button[type=\\"submit\\"]');
 
     // Monitor for login errors
     const error = page.locator('#form-error-message');
@@ -249,8 +309,8 @@ try {
    page.waitForURL('**/id/login/mfa**').then(async () => {
     console.log('MFA detected. Enter the security code to continue...');
     const otp = cfg.eg_otpkey && authenticator.generate(cfg.eg_otpkey) || await prompt({ type: 'text', message: 'Enter two-factor sign in code', validate: n => n.toString().length == 6 || 'The code must be 6 digits!' });
-    await page.locator('input[name=\"code-input-0\"]').pressSequentially(otp.toString());
-    await page.click('button[type=\"submit\"]');
+    await page.locator('input[name=\\"code-input-0\\"]').pressSequentially(otp.toString());
+    await page.click('button[type=\\"submit\\"]');
    }).catch(_ => { });
   }
 
@@ -307,35 +367,35 @@ try {
   console.log(`Processing game: ${url}`);
 
   await page.goto(url);
-  const purchaseBtn = page.locator('button[data-testid=\"purchase-cta-button\"] >> :has-text(\"e\"), :has-text(\"i\")').first();
+  const purchaseBtn = page.locator('button[data-testid=\\"purchase-cta-button\\"] >> :has-text(\\"e\\"), :has-text(\\"i\\")').first();
   await purchaseBtn.waitFor();
   const btnText = (await purchaseBtn.innerText()).toLowerCase();
 
   // Age verification
-  if (await page.locator('button:has-text(\"Continue\")').count() > 0) {
+  if (await page.locator('button:has-text(\\"Continue\\\")').count() > 0) {
    console.log('Mature content age verification required');
-   if (await page.locator('[data-testid=\"AgeSelect\"]').count()) {
+   if (await page.locator('[data-testid=\\"AgeSelect\\\"]').count()) {
     console.error('Age gate detected - this should not happen with proper cookies');
     await saveScreenshot(page, 'age_gate');
     await page.locator('#month_toggle').click();
-    await page.locator('#month_menu li:has-text(\"01\")').click();
+    await page.locator('#month_menu li:has-text(\\"01\\\")').click();
     await page.locator('#day_toggle').click();
-    await page.locator('#day_menu li:has-text(\"01\")').click();
+    await page.locator('#day_menu li:has-text(\\"01\\\")').click();
     await page.locator('#year_toggle').click();
-    await page.locator('#year_menu li:has-text(\"1987\")').click();
+    await page.locator('#year_menu li:has-text(\\"1987\\\")').click();
    }
-   await page.click('button:has-text(\"Continue\")', { delay: 111 });
+   await page.click('button:has-text(\\"Continue\\\")', { delay: 111 });
    await page.waitForTimeout(2000);
   }
 
   let title;
   let bundle_includes;
-  if (await page.locator('span:text-is(\"About Bundle\")').count()) {
-   title = (await page.locator('span:has-text(\"Buy\"):left-of([data-testid=\"purchase-cta-button\"])').first().innerText()).replace('Buy ', '');
+  if (await page.locator('span:text-is(\\"About Bundle\\\")').count()) {
+   title = (await page.locator('span:has-text(\\"Buy\\\"):left-of([data-testid=\\"purchase-cta-button\\"])').first().innerText()).replace('Buy ', '');
    try {
     bundle_includes = await Promise.all((await page.locator('.product-card-top-row h5').all()).map(b => b.innerText()));
    } catch (e) {
-    console.error('Failed to get \"Bundle Includes\":', e);
+    console.error('Failed to get \\"Bundle Includes\\":', e);
    }
   } else {
    title = await page.locator('h1').first().innerText();
@@ -360,7 +420,7 @@ try {
    console.log('Requires base game!');
    notify_game.status = 'requires base game';
    db.data[user][game_id].status ||= 'failed:requires-base-game';
-   const baseUrl = 'https://store.epicgames.com' + await page.locator('a:has-text(\"Overview\")').getAttribute('href');
+   const baseUrl = 'https://store.epicgames.com' + await page.locator('a:has-text(\\"Overview\\\")').getAttribute('href');
    console.log('Base game:', baseUrl);
    urls.push(baseUrl);
    urls.push(url);
@@ -368,19 +428,19 @@ try {
    console.log('Claiming game...');
    await purchaseBtn.click({ delay: 11 });
 
-   page.click('button:has-text(\"Continue\")').catch(_ => { });
-   page.click('button:has-text(\"Yes, buy now\")').catch(_ => { });
+   page.click('button:has-text(\\"Continue\\\")').catch(_ => { });
+   page.click('button:has-text(\\"Yes, buy now\\\")').catch(_ => { });
 
-   page.locator(':has-text(\"end user license agreement\")').waitFor().then(async () => {
+   page.locator(':has-text(\\"end user license agreement\\\")').waitFor().then(async () => {
     console.log('Accepting End User License Agreement...');
     await page.locator('input#agree').check();
-    await page.locator('button:has-text(\"Accept\")').click();
+    await page.locator('button:has-text(\\"Accept\\\")').click();
    }).catch(_ => { });
 
    await page.waitForSelector('#webPurchaseContainer iframe');
    const iframe = page.frameLocator('#webPurchaseContainer iframe');
 
-   if (await iframe.locator(':has-text(\"unavailable in your region\")').count() > 0) {
+   if (await iframe.locator(':has-text(\\"unavailable in your region\\\")').count() > 0) {
     console.error('Product unavailable in your region!');
     db.data[user][game_id].status = notify_game.status = 'unavailable-in-region';
     if (cfg.time) console.timeEnd('claim game');
@@ -393,7 +453,7 @@ try {
      notify('epic-games: EG_PARENTALPIN not set. Need to enter Parental Control PIN manually.');
     }
     await iframe.locator('input.payment-pin-code__input').first().pressSequentially(cfg.eg_parentalpin);
-    await iframe.locator('button:has-text(\"Continue\")').click({ delay: 11 });
+    await iframe.locator('button:has-text(\\"Continue\\\")').click({ delay: 11 });
    }).catch(_ => { });
 
    if (cfg.debug) await page.pause();
@@ -404,9 +464,9 @@ try {
     continue;
    }
 
-   await iframe.locator('button:has-text(\"Place Order\"):not(:has(.payment-loading--loading))').click({ delay: 11 });
+   await iframe.locator('button:has-text(\\"Place Order\\\"):not(:has(.payment-loading--loading))').click({ delay: 11 });
 
-   const btnAgree = iframe.locator('button:has-text(\"I Accept\")');
+   const btnAgree = iframe.locator('button:has-text(\\"I Accept\\\")');
    btnAgree.waitFor().then(() => btnAgree.click()).catch(_ => { });
 
    try {
@@ -417,7 +477,7 @@ try {
      await notify(`epic-games: captcha challenge for ${title}. Game link: ${url}`);
     }).catch(_ => { });
 
-    iframe.locator('.payment__errors:has-text(\"Failed to challenge captcha, please try again later.\")').waitFor().then(async () => {
+    iframe.locator('.payment__errors:has-text(\\"Failed to challenge captcha, please try again later.\\\")').waitFor().then(async () => {
      console.error('Failed to challenge captcha!');
      await notify('epic-games: failed to challenge captcha. Please check.');
     }).catch(_ => { });
